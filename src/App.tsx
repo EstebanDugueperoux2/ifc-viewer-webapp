@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { GeometryProcessor } from '@ifc-lite/geometry';
 import { Renderer } from '@ifc-lite/renderer';
+import {
+  DEFAULT_SERVER_URL,
+  checkServer,
+  createServerClient,
+  streamFromServer,
+} from './serverLoader';
+
+type ProcessingMode = 'local' | 'server';
 
 type ViewerSession = {
   renderer: Renderer;
@@ -114,6 +122,10 @@ export default function App() {
   const [status, setStatus] = useState('Initializing WebGPU viewer...');
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(true);
+  const [mode, setMode] = useState<ProcessingMode>('local');
+  const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER_URL);
+  const [serverToken, setServerToken] = useState('');
+  const [serverStatus, setServerStatus] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -188,6 +200,23 @@ export default function App() {
         throw new Error('Geometry processor is no longer available.');
       }
 
+      if (mode === 'server') {
+        setStatus('Uploading to server...');
+        const client = createServerClient(serverUrl, serverToken || undefined);
+        const problem = await checkServer(client);
+        if (problem) throw new Error(problem);
+
+        const total = await streamFromServer(client, await file.arrayBuffer(), (meshes, totalSoFar) => {
+          if (loadId !== loadIdRef.current) return;
+          renderer.addMeshes(meshes, true);
+          setStatus('Received ' + totalSoFar + ' meshes from server...');
+        });
+        if (loadId !== loadIdRef.current) return;
+        renderer.fitToView();
+        setStatus(file.name + ' loaded from server with ' + total + ' meshes.');
+        return;
+      }
+
       const bytes = new Uint8Array(await file.arrayBuffer());
 
       let loadedMeshes = 0;
@@ -217,7 +246,7 @@ export default function App() {
         setBusy(false);
       }
     }
-  }, [busy, ready]);
+  }, [busy, ready, mode, serverUrl, serverToken]);
 
   const onFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -235,6 +264,12 @@ export default function App() {
     }
   }, [busy, loadFile, ready]);
 
+  const testServer = useCallback(async () => {
+    setServerStatus('Testing...');
+    const problem = await checkServer(createServerClient(serverUrl, serverToken || undefined));
+    setServerStatus(problem ?? 'Connected.');
+  }, [serverUrl, serverToken]);
+
   const openFilePicker = useCallback(() => {
     if (!ready || busy) return;
     fileInputRef.current?.click();
@@ -247,7 +282,7 @@ export default function App() {
           <p className="eyebrow">IFC-Lite</p>
           <h1>ifc-viewer-webapp</h1>
           <p className="muted">
-            Standalone React + Vite viewer powered by IFC-Lite geometry streaming and WebGPU rendering.
+            React + Vite viewer powered by IFC-Lite and WebGPU rendering, processing files in the browser or on an IFC-Lite server.
           </p>
         </div>
 
@@ -269,6 +304,55 @@ export default function App() {
         >
           {busy ? 'Working…' : 'Choose IFC File'}
         </button>
+
+        <div className="panel">
+          <p className="label">Processing</p>
+          <label>
+            <input
+              type="radio"
+              name="mode"
+              checked={mode === 'local'}
+              disabled={busy}
+              onChange={() => setMode('local')}
+            />{' '}
+            In browser (WASM)
+          </label>
+          <br />
+          <label>
+            <input
+              type="radio"
+              name="mode"
+              checked={mode === 'server'}
+              disabled={busy}
+              onChange={() => setMode('server')}
+            />{' '}
+            IFC-Lite server
+          </label>
+          {mode === 'server' && (
+            <div className="serverConfig">
+              <input
+                type="text"
+                value={serverUrl}
+                disabled={busy}
+                aria-label="Server URL"
+                placeholder="/ifc-api or https://..."
+                onChange={(event) => setServerUrl(event.target.value)}
+              />
+              <input
+                type="password"
+                value={serverToken}
+                disabled={busy}
+                aria-label="Server API token (optional)"
+                placeholder="API token (optional)"
+                onChange={(event) => setServerToken(event.target.value)}
+              />
+              <button type="button" disabled={busy} onClick={() => void testServer()}>
+                Test connection
+              </button>
+              {serverStatus && <p className="muted">{serverStatus}</p>}
+            </div>
+          )}
+        </div>
 
         <div className="panel">
           <p className="label">Status</p>

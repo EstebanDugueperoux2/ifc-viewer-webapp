@@ -30,6 +30,14 @@ export default defineConfig({
   },
   server: {
     headers: isolationHeaders,
+    // Same-origin access to the IFC-Lite server (docker compose up -d in ifc-server).
+    proxy: {
+      '/ifc-api': {
+        target: process.env.IFC_SERVER_URL ?? 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ifc-api/, ''),
+      },
+    },
   },
   preview: {
     headers: isolationHeaders,
