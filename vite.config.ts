@@ -32,6 +32,12 @@ export default defineConfig({
     headers: isolationHeaders,
     // Same-origin access to the IFC-Lite server (docker compose up -d in ifc-server).
     proxy: {
+      // Same-origin access to the model store (docker compose up -d in ifc-server).
+      '/model-api': {
+        target: process.env.MODEL_STORE_URL ?? 'http://localhost:3002',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/model-api/, ''),
+      },
       '/ifc-api': {
         target: process.env.IFC_SERVER_URL ?? 'http://localhost:3001',
         changeOrigin: true,

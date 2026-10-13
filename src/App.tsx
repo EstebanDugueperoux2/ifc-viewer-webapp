@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { GeometryProcessor } from '@ifc-lite/geometry';
 import { Renderer } from '@ifc-lite/renderer';
+import ModelPanel from './ModelPanel';
 import {
   DEFAULT_SERVER_URL,
   checkServer,
@@ -126,6 +127,7 @@ export default function App() {
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER_URL);
   const [serverToken, setServerToken] = useState('');
   const [serverStatus, setServerStatus] = useState('');
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -213,6 +215,7 @@ export default function App() {
         });
         if (loadId !== loadIdRef.current) return;
         renderer.fitToView();
+        setCurrentFile(file);
         setStatus(file.name + ' loaded from server with ' + total + ' meshes.');
         return;
       }
@@ -236,6 +239,7 @@ export default function App() {
           setStatus(file.name + ' loaded with ' + event.totalMeshes + ' meshes.');
         }
       }
+      if (loadId === loadIdRef.current) setCurrentFile(file);
     } catch (error) {
       console.error(error);
       if (loadId === loadIdRef.current) {
@@ -353,6 +357,8 @@ export default function App() {
             </div>
           )}
         </div>
+
+        <ModelPanel disabled={!ready || busy} currentFile={currentFile} onLoad={loadFile} />
 
         <div className="panel">
           <p className="label">Status</p>

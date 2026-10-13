@@ -48,3 +48,17 @@ Configuration:
 | `VITE_IFC_SERVER_URL` | build-time env | Default Server URL for deployed builds (e.g. `https://ifc.example.com`); the server must then allow CORS from the webapp origin |
 
 If the server sets `IFC_SERVER_API_TOKEN`, enter the token in the sidebar. It is only kept in memory.
+
+## Creating and storing models
+
+- **New model**: generates a simple IFC4 building (4 walls and a floor slab per storey, plus a roof slab) from a name, footprint, storey height and number of storeys, using `@ifc-lite/create`, then displays it. Non-ASCII characters in names are escaped as required by the STEP format.
+- **Model library (server)**: **Save "..." to server** stores the model currently shown (created here or opened from a file) on the `model-store` service of the `ifc-server` repo. Stored models can be listed, opened in the viewer and deleted.
+
+Start the stack with `docker compose up -d` in `ifc-server` (IFC-Lite server on :3001, model store on :3002), then `npm run dev` here.
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `MODEL_STORE_URL` | Vite dev server env | Target of the `/model-api` proxy (default `http://localhost:3002`) |
+| `VITE_MODEL_STORE_URL` | build-time env | Default model store URL for deployed builds; the store must then list the webapp origin in `CORS_ALLOWED_ORIGINS` |
+
+If the store sets `STORE_API_TOKEN`, enter the token in the **Model library** panel (kept in memory only).
