@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createBuilding } from './modelCreator';
 import {
-  DEFAULT_STORE_URL,
   deleteModel,
   downloadModel,
   listModels,
@@ -14,8 +13,18 @@ interface ModelPanelProps {
   disabled: boolean;
   /** The IFC file currently shown in the viewer, if any. */
   currentFile: File | null;
-  /** Loads an IFC file into the viewer. */
-  onLoad: (file: File) => Promise<void>;
+  /** Loads an IFC file into the viewer; `stored` is set when it comes from the library. */
+  onLoad: (file: File, stored?: StoredModel | null) => Promise<unknown>;
+  /** Library model currently open in the viewer. */
+  activeStoredId: string | null;
+  /** Called when the open model becomes (or stops being) a library model. */
+  onStoredChange: (model: StoredModel | null) => void;
+  storeUrl: string;
+  storeToken: string;
+  setStoreUrl: (value: string) => void;
+  setStoreToken: (value: string) => void;
+  /** Changes whenever the list must be reloaded (e.g. the assistant saved a model). */
+  refreshKey: number;
 }
 
 const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -26,9 +35,18 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export default function ModelPanel({ disabled, currentFile, onLoad }: ModelPanelProps) {
-  const [storeUrl, setStoreUrl] = useState(DEFAULT_STORE_URL);
-  const [storeToken, setStoreToken] = useState('');
+export default function ModelPanel({
+  disabled,
+  currentFile,
+  onLoad,
+  activeStoredId,
+  onStoredChange,
+  storeUrl,
+  storeToken,
+  setStoreUrl,
+  setStoreToken,
+  refreshKey,
+}: ModelPanelProps) {
   const [models, setModels] = useState<StoredModel[]>([]);
   const [message, setMessage] = useState('');
   const [working, setWorking] = useState(false);
@@ -54,9 +72,9 @@ export default function ModelPanel({ disabled, currentFile, onLoad }: ModelPanel
 
   useEffect(() => {
     void refresh();
-    // Only on first mount: later refreshes are explicit (URL/token edits shouldn't spam requests).
+    // Only on mount and when asked (refreshKey): editing the URL/token must not spam requests.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refreshKey]);
 
   const run = useCallback(async (task: () => Promise<void>) => {
     setWorking(true);
@@ -83,6 +101,7 @@ export default function ModelPanel({ disabled, currentFile, onLoad }: ModelPanel
       const modelName = currentFile.name.replace(/\.ifc$/i, '');
       const saved = await saveModel(storeUrl, token, modelName, currentFile);
       setMessage(`Saved "${saved.name}" (${formatSize(saved.size)}) on the server.`);
+      onStoredChange(saved);
       setModels(await listModels(storeUrl, token));
     });
 
@@ -90,13 +109,14 @@ export default function ModelPanel({ disabled, currentFile, onLoad }: ModelPanel
     run(async () => {
       const file = await downloadModel(storeUrl, token, model);
       setMessage('');
-      await onLoad(file);
+      await onLoad(file, model);
     });
 
   const onDelete = (model: StoredModel) =>
     run(async () => {
       if (!window.confirm(`Delete "${model.name}" from the server?`)) return;
       await deleteModel(storeUrl, token, model.id);
+      if (model.id === activeStoredId) onStoredChange(null);
       setModels(await listModels(storeUrl, token));
       setMessage(`Deleted "${model.name}".`);
     });

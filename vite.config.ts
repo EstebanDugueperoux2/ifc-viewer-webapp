@@ -38,6 +38,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/model-api/, ''),
       },
+      // Same-origin access to the AI assistant (docker compose up -d in ifc-server).
+      '/assistant-api': {
+        target: process.env.ASSISTANT_URL ?? 'http://localhost:3003',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/assistant-api/, ''),
+      },
       '/ifc-api': {
         target: process.env.IFC_SERVER_URL ?? 'http://localhost:3001',
         changeOrigin: true,

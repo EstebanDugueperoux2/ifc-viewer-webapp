@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { GeometryProcessor } from '@ifc-lite/geometry';
 import { Renderer } from '@ifc-lite/renderer';
+import ChatPanel from './ChatPanel';
 import ModelPanel from './ModelPanel';
+import { DEFAULT_STORE_URL, downloadModel, type StoredModel } from './modelStore';
 import {
   DEFAULT_SERVER_URL,
   checkServer,
@@ -128,6 +130,12 @@ export default function App() {
   const [serverToken, setServerToken] = useState('');
   const [serverStatus, setServerStatus] = useState('');
   const [currentFile, setCurrentFile] = useState<File | null>(null);
+  const [activeStored, setActiveStored] = useState<StoredModel | null>(null);
+  const [storeUrl, setStoreUrl] = useState(DEFAULT_STORE_URL);
+  const [storeToken, setStoreToken] = useState('');
+  const [libraryRefresh, setLibraryRefresh] = useState(0);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [pendingModel, setPendingModel] = useState<StoredModel | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -179,8 +187,8 @@ export default function App() {
     };
   }, []);
 
-  const loadFile = useCallback(async (file: File) => {
-    if (!canvasRef.current || !processorRef.current || !ready || busy) return;
+  const loadFile = useCallback(async (file: File): Promise<boolean> => {
+    if (!canvasRef.current || !processorRef.current || !ready || busy) return false;
     const loadId = ++loadIdRef.current;
 
     setBusy(true);
@@ -191,7 +199,7 @@ export default function App() {
       const viewer = await createViewer(canvasRef.current);
       if (loadId !== loadIdRef.current) {
         viewer.destroy();
-        return;
+        return false;
       }
 
       previousViewer?.destroy();
@@ -213,11 +221,11 @@ export default function App() {
           renderer.addMeshes(meshes, true);
           setStatus('Received ' + totalSoFar + ' meshes from server...');
         });
-        if (loadId !== loadIdRef.current) return;
+        if (loadId !== loadIdRef.current) return false;
         renderer.fitToView();
         setCurrentFile(file);
         setStatus(file.name + ' loaded from server with ' + total + ' meshes.');
-        return;
+        return true;
       }
 
       const bytes = new Uint8Array(await file.arrayBuffer());
@@ -226,7 +234,7 @@ export default function App() {
       setStatus('Streaming geometry...');
 
       for await (const event of processor.processStreaming(bytes)) {
-        if (loadId !== loadIdRef.current) return;
+        if (loadId !== loadIdRef.current) return false;
 
         if (event.type === 'batch') {
           renderer.addMeshes(event.meshes, true);
@@ -239,12 +247,15 @@ export default function App() {
           setStatus(file.name + ' loaded with ' + event.totalMeshes + ' meshes.');
         }
       }
-      if (loadId === loadIdRef.current) setCurrentFile(file);
+      if (loadId !== loadIdRef.current) return false;
+      setCurrentFile(file);
+      return true;
     } catch (error) {
       console.error(error);
       if (loadId === loadIdRef.current) {
         setStatus(error instanceof Error ? error.message : 'Failed to load IFC file.');
       }
+      return false;
     } finally {
       if (loadId === loadIdRef.current) {
         setBusy(false);
@@ -252,21 +263,31 @@ export default function App() {
     }
   }, [busy, ready, mode, serverUrl, serverToken]);
 
+  /** Loads a file and records whether it is a library model (null for local files and new models). */
+  const openFile = useCallback(
+    async (file: File, stored: StoredModel | null = null) => {
+      const ok = await loadFile(file);
+      if (ok) setActiveStored(stored);
+      return ok;
+    },
+    [loadFile],
+  );
+
   const onFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    await loadFile(file);
+    await openFile(file);
     event.target.value = '';
-  }, [loadFile]);
+  }, [openFile]);
 
   const onDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     if (!ready || busy) return;
     const file = event.dataTransfer.files?.[0];
     if (file) {
-      await loadFile(file);
+      await openFile(file);
     }
-  }, [busy, loadFile, ready]);
+  }, [busy, openFile, ready]);
 
   const testServer = useCallback(async () => {
     setServerStatus('Testing...');
@@ -279,8 +300,35 @@ export default function App() {
     fileInputRef.current?.click();
   }, [busy, ready]);
 
+  /** The assistant saved a model: refresh the library and show the result in the viewer. */
+  const onAssistantSaved = useCallback((model: StoredModel) => {
+    setActiveStored(model);
+    setLibraryRefresh((value) => value + 1);
+    setPendingModel(model);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingModel || !ready || busy) return;
+    const model = pendingModel;
+    setPendingModel(null);
+    void (async () => {
+      try {
+        await openFile(await downloadModel(storeUrl, storeToken || undefined, model), model);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : 'Could not reload the saved model.');
+      }
+    })();
+  }, [busy, openFile, pendingModel, ready, storeToken, storeUrl]);
+
+  // The viewer sizes itself on window resize: tell it when the chat column opens or closes.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    return () => cancelAnimationFrame(frame);
+  }, [chatOpen]);
+
+
   return (
-    <div className="app">
+    <div className={`app${chatOpen ? ' withChat' : ''}`}>
       <aside className="sidebar">
         <div>
           <p className="eyebrow">IFC-Lite</p>
@@ -358,7 +406,18 @@ export default function App() {
           )}
         </div>
 
-        <ModelPanel disabled={!ready || busy} currentFile={currentFile} onLoad={loadFile} />
+        <ModelPanel
+          disabled={!ready || busy}
+          currentFile={currentFile}
+          onLoad={openFile}
+          activeStoredId={activeStored?.id ?? null}
+          onStoredChange={setActiveStored}
+          storeUrl={storeUrl}
+          storeToken={storeToken}
+          setStoreUrl={setStoreUrl}
+          setStoreToken={setStoreToken}
+          refreshKey={libraryRefresh}
+        />
 
         <div className="panel">
           <p className="label">Status</p>
@@ -378,7 +437,17 @@ export default function App() {
 
       <main className="viewportShell" onDragOver={(event) => event.preventDefault()} onDrop={(event) => void onDrop(event)}>
         <canvas ref={canvasRef} className="viewport" />
+        <button type="button" className="chatToggle" onClick={() => setChatOpen((open) => !open)}>
+          {chatOpen ? 'Hide assistant' : 'Assistant'}
+        </button>
       </main>
+
+      <ChatPanel
+        hidden={!chatOpen}
+        activeModel={activeStored}
+        onModelSaved={onAssistantSaved}
+        onClose={() => setChatOpen(false)}
+      />
     </div>
   );
 }

@@ -62,3 +62,21 @@ Start the stack with `docker compose up -d` in `ifc-server` (IFC-Lite server on 
 | `VITE_MODEL_STORE_URL` | build-time env | Default model store URL for deployed builds; the store must then list the webapp origin in `CORS_ALLOWED_ORIGINS` |
 
 If the store sets `STORE_API_TOKEN`, enter the token in the **Model library** panel (kept in memory only).
+
+## AI assistant (chat)
+
+The **Assistant** button (top right of the viewport) opens a chat column. Describe what you want and Claude creates, queries and edits the IFC model through the `assistant` service of `ifc-server`, which embeds the `@ifc-lite/mcp` server (see that repository's README for the architecture and security model).
+
+- Examples: "Create a two-storey 12 x 8 m building", "How many walls are there?", "Move the north wall 50 cm", "Rename the storeys".
+- The assistant works on the **library model** open in the viewer. Open one from *Model library*, or save the current model first. Without one, it can create a model from scratch.
+- When it saves, the viewer reloads the result automatically and the library list refreshes. Under **Settings** you choose whether saving keeps the original and writes a copy (default) or updates the opened model in place. That choice is yours; the assistant cannot override it.
+- Each tool call is shown as a small line (✓ done, ✗ failed). **New chat** starts a fresh conversation; **Stop** cancels the current answer.
+
+Start the stack with `docker compose up -d` in `ifc-server` after setting `ANTHROPIC_API_KEY` in its `.env`. The key stays on the server and is never sent to the browser.
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `ASSISTANT_URL` | Vite dev server env | Target of the `/assistant-api` proxy (default `http://localhost:3003`) |
+| `VITE_ASSISTANT_URL` | build-time env | Default assistant URL for deployed builds; the assistant must then list the webapp origin in `CORS_ALLOWED_ORIGINS` |
+
+If the assistant sets `ASSISTANT_API_TOKEN`, enter it under the chat's **Settings** (kept in memory only).
