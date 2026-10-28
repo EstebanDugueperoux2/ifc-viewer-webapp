@@ -4,16 +4,10 @@ import {
   resetConversation,
   streamChat,
   type AssistantEvent,
-  type SaveMode,
 } from './assistantClient';
-import type { StoredModel } from './modelStore';
 
 interface ChatPanelProps {
   hidden: boolean;
-  /** Library model currently open in the viewer, or null. */
-  activeModel: StoredModel | null;
-  /** Called when the assistant saved a model: the app reloads it in the viewer. */
-  onModelSaved: (model: StoredModel) => void;
   onClose: () => void;
 }
 
@@ -27,10 +21,9 @@ const SUGGESTIONS = [
   'List the storeys and what they contain',
 ];
 
-export default function ChatPanel({ hidden, activeModel, onModelSaved, onClose }: ChatPanelProps) {
+export default function ChatPanel({ hidden, onClose }: ChatPanelProps) {
   const [assistantUrl, setAssistantUrl] = useState(DEFAULT_ASSISTANT_URL);
   const [token, setToken] = useState('');
-  const [saveMode, setSaveMode] = useState<SaveMode>('new');
   const [items, setItems] = useState<ChatItem[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -65,9 +58,6 @@ export default function ChatPanel({ hidden, activeModel, onModelSaved, onClose }
             ),
           );
           break;
-        case 'model_saved':
-          onModelSaved(event.model);
-          break;
         case 'error':
           setItems((previous) => [...previous, { kind: 'error', text: event.message }]);
           break;
@@ -75,7 +65,7 @@ export default function ChatPanel({ hidden, activeModel, onModelSaved, onClose }
           break;
       }
     },
-    [onModelSaved],
+    [],
   );
 
   const send = useCallback(
@@ -91,7 +81,7 @@ export default function ChatPanel({ hidden, activeModel, onModelSaved, onClose }
         await streamChat(
           assistantUrl,
           token || undefined,
-          { conversationId: conversationId.current, message, modelId: activeModel?.id ?? null, saveMode },
+          { conversationId: conversationId.current, message },
           handleEvent,
           controller.signal,
         );
@@ -109,7 +99,7 @@ export default function ChatPanel({ hidden, activeModel, onModelSaved, onClose }
         abortRef.current = null;
       }
     },
-    [activeModel, assistantUrl, busy, handleEvent, saveMode, token],
+    [assistantUrl, busy, handleEvent, token],
   );
 
   const newConversation = useCallback(() => {
@@ -142,9 +132,7 @@ export default function ChatPanel({ hidden, activeModel, onModelSaved, onClose }
       </header>
 
       <p className="muted chatContext">
-        {activeModel
-          ? `Model: ${activeModel.name} (from the library)`
-          : 'No library model open: ask for a new one, or open/save a model first.'}
+        Ask the ifc-server assistant to create or inspect IFC models.
       </p>
 
       <div className="chatMessages" role="log" aria-live="polite">
@@ -197,19 +185,12 @@ export default function ChatPanel({ hidden, activeModel, onModelSaved, onClose }
       <details className="chatSettings">
         <summary>Settings</summary>
         <div className="serverConfig">
-          <label className="field">
-            <span>When the assistant saves</span>
-            <select value={saveMode} disabled={busy} onChange={(event) => setSaveMode(event.target.value as SaveMode)}>
-              <option value="new">Keep the original, save a copy</option>
-              <option value="overwrite">Update the opened model in place</option>
-            </select>
-          </label>
           <input
             type="text"
             value={assistantUrl}
             disabled={busy}
             aria-label="Assistant URL"
-            placeholder="/assistant-api or https://..."
+            placeholder="http://localhost:3003 or https://..."
             onChange={(event) => setAssistantUrl(event.target.value)}
           />
           <input

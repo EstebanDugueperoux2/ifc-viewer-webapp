@@ -3,7 +3,6 @@ import { GeometryProcessor } from '@ifc-lite/geometry';
 import { Renderer } from '@ifc-lite/renderer';
 import ChatPanel from './ChatPanel';
 import ModelPanel from './ModelPanel';
-import { DEFAULT_STORE_URL, downloadModel, type StoredModel } from './modelStore';
 import {
   DEFAULT_SERVER_URL,
   checkServer,
@@ -125,17 +124,11 @@ export default function App() {
   const [status, setStatus] = useState('Initializing WebGPU viewer...');
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(true);
-  const [mode, setMode] = useState<ProcessingMode>('local');
+  const [mode, setMode] = useState<ProcessingMode>('server');
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER_URL);
   const [serverToken, setServerToken] = useState('');
   const [serverStatus, setServerStatus] = useState('');
-  const [currentFile, setCurrentFile] = useState<File | null>(null);
-  const [activeStored, setActiveStored] = useState<StoredModel | null>(null);
-  const [storeUrl, setStoreUrl] = useState(DEFAULT_STORE_URL);
-  const [storeToken, setStoreToken] = useState('');
-  const [libraryRefresh, setLibraryRefresh] = useState(0);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [pendingModel, setPendingModel] = useState<StoredModel | null>(null);
+  const [chatOpen, setChatOpen] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -223,7 +216,6 @@ export default function App() {
         });
         if (loadId !== loadIdRef.current) return false;
         renderer.fitToView();
-        setCurrentFile(file);
         setStatus(file.name + ' loaded from server with ' + total + ' meshes.');
         return true;
       }
@@ -248,7 +240,6 @@ export default function App() {
         }
       }
       if (loadId !== loadIdRef.current) return false;
-      setCurrentFile(file);
       return true;
     } catch (error) {
       console.error(error);
@@ -263,15 +254,7 @@ export default function App() {
     }
   }, [busy, ready, mode, serverUrl, serverToken]);
 
-  /** Loads a file and records whether it is a library model (null for local files and new models). */
-  const openFile = useCallback(
-    async (file: File, stored: StoredModel | null = null) => {
-      const ok = await loadFile(file);
-      if (ok) setActiveStored(stored);
-      return ok;
-    },
-    [loadFile],
-  );
+  const openFile = loadFile;
 
   const onFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -299,26 +282,6 @@ export default function App() {
     if (!ready || busy) return;
     fileInputRef.current?.click();
   }, [busy, ready]);
-
-  /** The assistant saved a model: refresh the library and show the result in the viewer. */
-  const onAssistantSaved = useCallback((model: StoredModel) => {
-    setActiveStored(model);
-    setLibraryRefresh((value) => value + 1);
-    setPendingModel(model);
-  }, []);
-
-  useEffect(() => {
-    if (!pendingModel || !ready || busy) return;
-    const model = pendingModel;
-    setPendingModel(null);
-    void (async () => {
-      try {
-        await openFile(await downloadModel(storeUrl, storeToken || undefined, model), model);
-      } catch (error) {
-        setStatus(error instanceof Error ? error.message : 'Could not reload the saved model.');
-      }
-    })();
-  }, [busy, openFile, pendingModel, ready, storeToken, storeUrl]);
 
   // The viewer sizes itself on window resize: tell it when the chat column opens or closes.
   useEffect(() => {
@@ -387,7 +350,7 @@ export default function App() {
                 value={serverUrl}
                 disabled={busy}
                 aria-label="Server URL"
-                placeholder="/ifc-api or https://..."
+                placeholder="http://localhost:3001 or https://..."
                 onChange={(event) => setServerUrl(event.target.value)}
               />
               <input
@@ -406,18 +369,7 @@ export default function App() {
           )}
         </div>
 
-        <ModelPanel
-          disabled={!ready || busy}
-          currentFile={currentFile}
-          onLoad={openFile}
-          activeStoredId={activeStored?.id ?? null}
-          onStoredChange={setActiveStored}
-          storeUrl={storeUrl}
-          storeToken={storeToken}
-          setStoreUrl={setStoreUrl}
-          setStoreToken={setStoreToken}
-          refreshKey={libraryRefresh}
-        />
+        <ModelPanel disabled={!ready || busy} onLoad={openFile} />
 
         <div className="panel">
           <p className="label">Status</p>
@@ -444,8 +396,6 @@ export default function App() {
 
       <ChatPanel
         hidden={!chatOpen}
-        activeModel={activeStored}
-        onModelSaved={onAssistantSaved}
         onClose={() => setChatOpen(false)}
       />
     </div>

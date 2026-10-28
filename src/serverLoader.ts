@@ -2,12 +2,12 @@ import { IfcServerClient, type MeshData as ServerMeshData } from '@ifc-lite/serv
 import type { MeshData } from '@ifc-lite/geometry';
 
 /**
- * Default server base URL. In dev, Vite proxies `/ifc-api` to the IFC-Lite
- * server (see vite.config.ts), which avoids CORS/COEP issues. Override with
- * VITE_IFC_SERVER_URL (e.g. https://ifc.example.com) for deployed setups.
+ * Default server base URL. Override with VITE_IFC_SERVER_URL (e.g. http://localhost:3001)
+ * for direct requests to the backend server. In production builds, this should point
+ * to your deployed ifc-server instance.
  */
 export const DEFAULT_SERVER_URL: string =
-  (import.meta.env.VITE_IFC_SERVER_URL as string | undefined) ?? '/ifc-api';
+  (import.meta.env.VITE_IFC_SERVER_URL as string | undefined) ?? 'http://localhost:3001';
 
 export function createServerClient(baseUrl: string, token?: string): IfcServerClient {
   return new IfcServerClient({

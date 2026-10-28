@@ -20,8 +20,13 @@ const fixIfcLiteWorkerUrl = (): Plugin => ({
 });
 
 export default defineConfig({
-  plugins: [fixIfcLiteWorkerUrl(), react()],
+  plugins: [
+    fixIfcLiteWorkerUrl(),
+    react(),
+  ],
   optimizeDeps: {
+    // Include wasm packages to ensure they're available
+    include: ['parquet-wasm', 'apache-arrow'],
     exclude: ['@ifc-lite/wasm', '@ifc-lite/geometry'],
   },
   worker: {
@@ -29,29 +34,18 @@ export default defineConfig({
     plugins: () => [fixIfcLiteWorkerUrl()],
   },
   server: {
-    headers: isolationHeaders,
-    // Same-origin access to the IFC-Lite server (docker compose up -d in ifc-server).
-    proxy: {
-      // Same-origin access to the model store (docker compose up -d in ifc-server).
-      '/model-api': {
-        target: process.env.MODEL_STORE_URL ?? 'http://localhost:3002',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/model-api/, ''),
-      },
-      // Same-origin access to the AI assistant (docker compose up -d in ifc-server).
-      '/assistant-api': {
-        target: process.env.ASSISTANT_URL ?? 'http://localhost:3003',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/assistant-api/, ''),
-      },
-      '/ifc-api': {
-        target: process.env.IFC_SERVER_URL ?? 'http://localhost:3001',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/ifc-api/, ''),
-      },
+    headers: {
+      ...isolationHeaders,
+      // Serve WASM files with correct MIME type
     },
+    // Direct requests to backend services (no proxy)
   },
   preview: {
     headers: isolationHeaders,
+  },
+  // WASM configuration
+  assetsInclude: ['**/*.wasm'],
+  build: {
+    assetsInlineLimit: 0, // Don't inline WASM
   },
 });

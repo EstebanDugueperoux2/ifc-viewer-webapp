@@ -49,27 +49,16 @@ Configuration:
 
 If the server sets `IFC_SERVER_API_TOKEN`, enter the token in the sidebar. It is only kept in memory.
 
-## Creating and storing models
+## Creating models
 
 - **New model**: generates a simple IFC4 building (4 walls and a floor slab per storey, plus a roof slab) from a name, footprint, storey height and number of storeys, using `@ifc-lite/create`, then displays it. Non-ASCII characters in names are escaped as required by the STEP format.
-- **Model library (server)**: **Save "..." to server** stores the model currently shown (created here or opened from a file) on the `model-store` service of the `ifc-server` repo. Stored models can be listed, opened in the viewer and deleted.
-
-Start the stack with `docker compose up -d` in `ifc-server` (IFC-Lite server on :3001, model store on :3002), then `npm run dev` here.
-
-| Variable | Where | Purpose |
-|---|---|---|
-| `MODEL_STORE_URL` | Vite dev server env | Target of the `/model-api` proxy (default `http://localhost:3002`) |
-| `VITE_MODEL_STORE_URL` | build-time env | Default model store URL for deployed builds; the store must then list the webapp origin in `CORS_ALLOWED_ORIGINS` |
-
-If the store sets `STORE_API_TOKEN`, enter the token in the **Model library** panel (kept in memory only).
 
 ## AI assistant (chat)
 
 The **Assistant** button (top right of the viewport) opens a chat column. Describe what you want and Claude creates, queries and edits the IFC model through the `assistant` service of `ifc-server`, which embeds the `@ifc-lite/mcp` server (see that repository's README for the architecture and security model).
 
 - Examples: "Create a two-storey 12 x 8 m building", "How many walls are there?", "Move the north wall 50 cm", "Rename the storeys".
-- The assistant works on the **library model** open in the viewer. Open one from *Model library*, or save the current model first. Without one, it can create a model from scratch.
-- When it saves, the viewer reloads the result automatically and the library list refreshes. Under **Settings** you choose whether saving keeps the original and writes a copy (default) or updates the opened model in place. That choice is yours; the assistant cannot override it.
+- The assistant can create and edit models managed by the `ifc-server` assistant service. It does not read the IFC file currently open in the viewer.
 - Each tool call is shown as a small line (✓ done, ✗ failed). **New chat** starts a fresh conversation; **Stop** cancels the current answer.
 
 Start the stack with `docker compose up -d` in `ifc-server` after setting `ANTHROPIC_API_KEY` in its `.env`. The key stays on the server and is never sent to the browser.

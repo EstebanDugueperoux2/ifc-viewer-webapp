@@ -1,0 +1,53 @@
+# .github/workflows/deploy-web.yml  (webapp repo)
+name: Deploy webapp to GCS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_API_BASE_URL: /api           # same-origin through the load balancer
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Upload hashed assets (long cache)
+        run: |
+          gcloud storage rsync dist "gs://${{ vars.WEB_BUCKET }}" \
+            --recursive --delete-unmatched-destination-objects \
+            --exclude="index\.html$"
+          gcloud storage objects update "gs://${{ vars.WEB_BUCKET }}/assets/**" \
+            --cache-control="public, max-age=31536000, immutable" || true
+
+      - name: Upload index.html (no cache)
+        run: |
+          gcloud storage cp dist/index.html "gs://${{ vars.WEB_BUCKET }}/index.html" \
+            --cache-control="no-cache"
+
+      # WASM must be served with the right MIME type
+      - name: Fix .wasm content-type
+        run: |
+          gcloud storage objects update "gs://${{ vars.WEB_BUCKET }}/**/*.wasm" \
+            --content-type="application/wasm" || true

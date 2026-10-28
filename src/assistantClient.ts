@@ -1,29 +1,24 @@
-import type { StoredModel } from './modelStore';
 
 /**
- * Client for the `assistant` service of the companion ifc-server repo. In dev, Vite proxies
- * `/assistant-api` to it (see vite.config.ts). Override with VITE_ASSISTANT_URL for deployed builds.
+ * Client for the `assistant` service of the companion ifc-server repo.
+ * Override with VITE_ASSISTANT_URL (e.g. http://localhost:3003) for direct requests
+ * to the backend server. In production builds, this should point to your deployed
+ * assistant instance.
  */
 export const DEFAULT_ASSISTANT_URL: string =
-  (import.meta.env.VITE_ASSISTANT_URL as string | undefined) ?? '/assistant-api';
-
-export type SaveMode = 'new' | 'overwrite';
+  (import.meta.env.VITE_ASSISTANT_URL as string | undefined) ?? 'http://localhost:3003';
 
 export type AssistantEvent =
   | { type: 'conversation'; conversationId: string }
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; id: string; name: string; isError: boolean; summary: string }
-  | { type: 'model_saved'; model: StoredModel }
   | { type: 'error'; message: string }
   | { type: 'done' };
 
 export interface ChatRequest {
   conversationId?: string;
   message: string;
-  /** Stored model open in the viewer, or null when none is. */
-  modelId: string | null;
-  saveMode: SaveMode;
 }
 
 const root = (baseUrl: string): string => baseUrl.replace(/\/+$/, '');
